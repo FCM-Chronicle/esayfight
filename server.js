@@ -6,12 +6,7 @@ const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+const io = socketIo(server);
 
 const PORT = process.env.PORT || 3000;
 
@@ -50,6 +45,11 @@ loadRankings();
 // 메인 페이지
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// 건강 체크
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // 랭킹 API
@@ -98,13 +98,10 @@ let onlineUsers = 0;
 
 io.on('connection', (socket) => {
     onlineUsers++;
-    console.log(`[${new Date().toISOString()}] 플레이어 연결:`, socket.id, '(총', onlineUsers, '명)');
+    console.log('Player connected:', socket.id);
     
-    // 온라인 유저 수 브로드캐스트
     io.emit('onlineCount', onlineUsers);
-    
-    // 연결 확인 메시지
-    socket.emit('systemMessage', '서버에 성공적으로 연결되었습니다!');
+    socket.emit('systemMessage', 'Connected to server!');
     
     let currentPlayer = {
         id: socket.id,
@@ -306,15 +303,12 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 연결 해제
     socket.on('disconnect', () => {
         onlineUsers--;
-        console.log('플레이어 연결 해제:', socket.id, '(총', onlineUsers, '명)');
+        console.log('Player disconnected:', socket.id);
         
-        // 온라인 유저 수 업데이트
         io.emit('onlineCount', onlineUsers);
         
-        // 방에서 나가기 처리
         if (currentPlayer.room) {
             const room = gameRooms.get(currentPlayer.room);
             if (room) {
@@ -328,7 +322,7 @@ io.on('connection', (socket) => {
                     }
                     io.to(currentPlayer.room).emit('roomUpdate', room);
                     io.to(currentPlayer.room).emit('systemMessage', 
-                        `${currentPlayer.nickname}님이 나가셨습니다.`);
+                        `${currentPlayer.nickname} left the room.`);
                 }
                 
                 io.emit('roomListUpdate');
@@ -616,30 +610,7 @@ function checkGameEnd(room) {
     }
 }
 
-// 에러 핸들링 추가
-server.on('error', (error) => {
-    console.error('서버 오류:', error);
-});
-
-process.on('uncaughtException', (error) => {
-    console.error('처리되지 않은 예외:', error);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('처리되지 않은 Promise 거부:', reason);
-});
-
 // 서버 시작
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`=================================`);
-    console.log(`애새이 대난투 서버 시작!`);
-    console.log(`포트: ${PORT}`);
-    console.log(`시간: ${new Date().toISOString()}`);
-    console.log(`URL: http://localhost:${PORT}`);
-    console.log(`Render URL: https://esayfight.onrender.com`);
-    console.log(`Socket.IO 경로: /socket.io/`);
-    console.log(`=================================`);
-    
-    // Socket.IO 테스트
-    console.log('Socket.IO 서버 준비 완료');
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
