@@ -341,6 +341,8 @@ function processGameAction(room, playerId, action) {
     
     const playerKey = `player${playerIndex + 1}`;
     const player = room.gameData[playerKey];
+    const otherPlayerKey = playerIndex === 0 ? 'player2' : 'player1';
+    const otherPlayer = room.gameData[otherPlayerKey];
     
     switch (action.type) {
         case 'move':
@@ -353,49 +355,175 @@ function processGameAction(room, playerId, action) {
             if (player.bullets > 0) {
                 player.bullets--;
                 
-                // 다른 플레이어에게 데미지
-                const otherPlayerKey = playerIndex === 0 ? 'player2' : 'player1';
-                const otherPlayer = room.gameData[otherPlayerKey];
-                
                 let damage = 0;
+                let hit = false;
+                
                 if (player.char === 1) {
-                    damage = 10; // 애새이 1호 일반 공격
+                    // 애새이 1호 - 원거리 공격
+                    damage = 10;
+                    
+                    // 원거리 공격 충돌 검사 (직선 궤적)
+                    const bulletSpeed = 500; // 총알 속도
+                    const steps = 20; // 충돌 검사 단계
+                    
+                    for (let i = 0; i <= steps; i++) {
+                        const progress = i / steps;
+                        const bulletX = player.x + (action.mouseX - player.x) * progress;
+                        const bulletY = player.y + (action.mouseY - player.y) * progress;
+                        
+                        // 상대방과의 거리 계산
+                        const distToOther = Math.sqrt(
+                            Math.pow(bulletX - otherPlayer.x, 2) + 
+                            Math.pow(bulletY - otherPlayer.y, 2)
+                        );
+                        
+                        // 충돌 검사 (플레이어 반지름 25)
+                        if (distToOther <= 25) {
+                            hit = true;
+                            // 충돌 이펙트 전송
+                            io.to(room.id).emit('attackHit', {
+                                x: bulletX,
+                                y: bulletY
+                            });
+                            break;
+                        }
+                    }
                 } else {
-                    damage = 7; // 애새이 2호 일반 공격
-                    // 돌진 처리
-                    const dashDistance = 5;
+                    // 애새이 2호 - 돌진 공격
+                    damage = 7;
+                    
+                    // 돌진 거리 6배 증가 (5 -> 30)
+                    const dashDistance = 30;
+                    const oldX = player.x;
+                    const oldY = player.y;
+                    
                     player.x = Math.max(25, Math.min(775, player.x + action.dx * dashDistance));
                     player.y = Math.max(25, Math.min(575, player.y + action.dy * dashDistance));
+                    
+                    // 돌진 경로에서 충돌 검사
+                    const steps = 15; // 충돌 검사 단계
+                    
+                    for (let i = 0; i <= steps; i++) {
+                        const progress = i / steps;
+                        const dashX = oldX + (player.x - oldX) * progress;
+                        const dashY = oldY + (player.y - oldY) * progress;
+                        
+                        // 상대방과의 거리 계산
+                        const distToOther = Math.sqrt(
+                            Math.pow(dashX - otherPlayer.x, 2) + 
+                            Math.pow(dashY - otherPlayer.y, 2)
+                        );
+                        
+                        // 충돌 검사 (플레이어 반지름 25 + 돌진 판정 10)
+                        if (distToOther <= 35) {
+                            hit = true;
+                            // 충돌 이펙트 전송
+                            io.to(room.id).emit('attackHit', {
+                                x: otherPlayer.x,
+                                y: otherPlayer.y
+                            });
+                            break;
+                        }
+                    }
                 }
                 
-                otherPlayer.health = Math.max(0, otherPlayer.health - damage);
+                // 히트했을 때만 데미지 적용
+                if (hit) {
+                    otherPlayer.health = Math.max(0, otherPlayer.health - damage);
+                }
                 
                 // 특수 공격 체크
                 if (player.bullets === 0) {
                     setTimeout(() => {
                         let specialDamage = 0;
+                        let specialHit = false;
+                        
                         if (player.char === 1) {
+                            // 애새이 1호 특수공격 - 강력한 돌진
                             specialDamage = 50;
-                            // 강력한 돌진
-                            const dashDistance = 5;
+                            const dashDistance = 30; // 6배 증가
+                            const oldX = player.x;
+                            const oldY = player.y;
+                            
                             player.x = Math.max(25, Math.min(775, player.x + action.dx * dashDistance));
                             player.y = Math.max(25, Math.min(575, player.y + action.dy * dashDistance));
+                            
+                            // 돌진 경로에서 충돌 검사
+                            const steps = 15;
+                            for (let i = 0; i <= steps; i++) {
+                                const progress = i / steps;
+                                const dashX = oldX + (player.x - oldX) * progress;
+                                const dashY = oldY + (player.y - oldY) * progress;
+                                
+                                const distToOther = Math.sqrt(
+                                    Math.pow(dashX - otherPlayer.x, 2) + 
+                                    Math.pow(dashY - otherPlayer.y, 2)
+                                );
+                                
+                                if (distToOther <= 35) {
+                                    specialHit = true;
+                                    io.to(room.id).emit('attackHit', {
+                                        x: otherPlayer.x,
+                                        y: otherPlayer.y
+                                    });
+                                    break;
+                                }
+                            }
                         } else {
+                            // 애새이 2호 특수공격 - 초고속 돌진
                             specialDamage = 30;
-                            // 초고속 돌진
-                            const dashDistance = 10;
+                            const dashDistance = 60; // 6배 증가 (10 -> 60)
+                            const oldX = player.x;
+                            const oldY = player.y;
+                            
                             player.x = Math.max(25, Math.min(775, player.x + action.dx * dashDistance));
                             player.y = Math.max(25, Math.min(575, player.y + action.dy * dashDistance));
+                            
+                            // 돌진 경로에서 충돌 검사
+                            const steps = 20;
+                            for (let i = 0; i <= steps; i++) {
+                                const progress = i / steps;
+                                const dashX = oldX + (player.x - oldX) * progress;
+                                const dashY = oldY + (player.y - oldY) * progress;
+                                
+                                const distToOther = Math.sqrt(
+                                    Math.pow(dashX - otherPlayer.x, 2) + 
+                                    Math.pow(dashY - otherPlayer.y, 2)
+                                );
+                                
+                                if (distToOther <= 35) {
+                                    specialHit = true;
+                                    // 상대방을 뒤로 밀어내기
+                                    const knockbackDistance = 50;
+                                    otherPlayer.x = Math.max(25, Math.min(775, 
+                                        otherPlayer.x + action.dx * knockbackDistance));
+                                    otherPlayer.y = Math.max(25, Math.min(575, 
+                                        otherPlayer.y + action.dy * knockbackDistance));
+                                    
+                                    io.to(room.id).emit('attackHit', {
+                                        x: otherPlayer.x,
+                                        y: otherPlayer.y
+                                    });
+                                    break;
+                                }
+                            }
                         }
                         
-                        otherPlayer.health = Math.max(0, otherPlayer.health - specialDamage);
+                        // 특수 공격이 히트했을 때만 데미지 적용
+                        if (specialHit) {
+                            otherPlayer.health = Math.max(0, otherPlayer.health - specialDamage);
+                        }
                         
                         // 게임 종료 체크
                         checkGameEnd(room);
                         
                         // 업데이트 전송
                         io.to(room.id).emit('gameUpdate', room.gameData);
-                        io.to(room.id).emit('specialAttack', { player: playerKey, damage: specialDamage });
+                        io.to(room.id).emit('specialAttack', { 
+                            player: playerKey, 
+                            damage: specialDamage,
+                            hit: specialHit
+                        });
                     }, 100);
                 }
             }
