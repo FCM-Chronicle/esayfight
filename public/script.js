@@ -778,13 +778,20 @@ function setNickname() {
     const nicknameInput = document.getElementById('nickname');
     const nickname = nicknameInput.value.trim();
     
+    console.log('Attempting to set nickname:', nickname); // 디버그 로그
+    
+    if (!nickname) {
+        showError('Please enter a nickname.');
+        return;
+    }
+    
     if (nickname.length < 2) {
-        showError('닉네임은 2글자 이상이어야 합니다.');
+        showError('Nickname must be at least 2 characters long.');
         return;
     }
     
     if (!isConnected) {
-        showError('서버에 연결되지 않았습니다.');
+        showError('Not connected to server.');
         return;
     }
     
@@ -794,7 +801,12 @@ function setNickname() {
     document.getElementById('playerName').classList.remove('hidden');
     
     // 서버에 닉네임 전송
-    socket.emit('setNickname', nickname);
+    if (socket) {
+        socket.emit('setNickname', nickname);
+        console.log('Nickname sent to server:', nickname);
+    } else {
+        console.error('Socket not available');
+    }
 }
 
 // 방 목록 로드
@@ -1036,48 +1048,74 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // 메뉴 버튼들
-    document.getElementById('joinRoomBtn').addEventListener('click', () => {
-        if (!gameState.nickname) {
-            showError('먼저 닉네임을 설정해주세요.');
-            return;
-        }
-        showScreen('roomList');
-        loadRooms();
-    });
+    const joinRoomBtn = document.getElementById('joinRoomBtn');
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const rankingBtn = document.getElementById('rankingBtn');
     
-    document.getElementById('createRoomBtn').addEventListener('click', () => {
-        if (!gameState.nickname) {
-            showError('먼저 닉네임을 설정해주세요.');
-            return;
-        }
-        showScreen('createRoom');
-    });
+    if (joinRoomBtn) {
+        joinRoomBtn.addEventListener('click', () => {
+            if (!gameState.nickname) {
+                showError('Please set your nickname first.');
+                return;
+            }
+            showScreen('roomList');
+            loadRooms();
+        });
+    }
     
-    document.getElementById('rankingBtn').addEventListener('click', () => {
-        showScreen('ranking');
-        loadRankings();
-    });
+    if (createRoomBtn) {
+        createRoomBtn.addEventListener('click', () => {
+            if (!gameState.nickname) {
+                showError('Please set your nickname first.');
+                return;
+            }
+            showScreen('createRoom');
+        });
+    }
+    
+    if (rankingBtn) {
+        rankingBtn.addEventListener('click', () => {
+            showScreen('ranking');
+            loadRankings();
+        });
+    }
     
     // 뒤로가기 버튼들
-    document.getElementById('backFromRooms').addEventListener('click', () => showScreen('mainMenu'));
-    document.getElementById('backFromCreate').addEventListener('click', () => showScreen('mainMenu'));
-    document.getElementById('backFromRanking').addEventListener('click', () => showScreen('mainMenu'));
-    document.getElementById('backToMenuBtn').addEventListener('click', () => {
-        socket.emit('leaveRoom');
-        showScreen('mainMenu');
+    const backButtons = [
+        { id: 'backFromRooms', action: () => showScreen('mainMenu') },
+        { id: 'backFromCreate', action: () => showScreen('mainMenu') },
+        { id: 'backFromRanking', action: () => showScreen('mainMenu') },
+        { id: 'backToMenuBtn', action: () => {
+            if (socket) socket.emit('leaveRoom');
+            showScreen('mainMenu');
+        }}
+    ];
+    
+    backButtons.forEach(btn => {
+        const element = document.getElementById(btn.id);
+        if (element) {
+            element.addEventListener('click', btn.action);
+        }
     });
     
     // 방 관련 버튼들
-    document.getElementById('refreshRooms').addEventListener('click', loadRooms);
-    document.getElementById('createRoomBtn2').addEventListener('click', createRoom);
-    document.getElementById('readyBtn').addEventListener('click', toggleReady);
-    document.getElementById('startGameBtn').addEventListener('click', startGameAsHost);
-    document.getElementById('leaveRoomBtn').addEventListener('click', () => {
-        socket.emit('leaveRoom');
-        showScreen('mainMenu');
-    });
-    document.getElementById('playAgainBtn').addEventListener('click', () => {
-        showScreen('waitingRoom');
+    const roomButtons = [
+        { id: 'refreshRooms', action: loadRooms },
+        { id: 'createRoomBtn2', action: createRoom },
+        { id: 'readyBtn', action: toggleReady },
+        { id: 'startGameBtn', action: startGameAsHost },
+        { id: 'leaveRoomBtn', action: () => {
+            if (socket) socket.emit('leaveRoom');
+            showScreen('mainMenu');
+        }},
+        { id: 'playAgainBtn', action: () => showScreen('waitingRoom') }
+    ];
+    
+    roomButtons.forEach(btn => {
+        const element = document.getElementById(btn.id);
+        if (element) {
+            element.addEventListener('click', btn.action);
+        }
     });
     
     // 캐릭터 선택
@@ -1090,13 +1128,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // 대기실 캐릭터 변경
-    document.getElementById('characterSelect').addEventListener('change', changeCharacter);
+    const characterSelect = document.getElementById('characterSelect');
+    if (characterSelect) {
+        characterSelect.addEventListener('change', changeCharacter);
+    }
     
     // 채팅 시스템
-    document.getElementById('sendChat').addEventListener('click', sendChatMessage);
-    document.getElementById('chatInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendChatMessage();
-    });
+    const sendChatBtn = document.getElementById('sendChat');
+    const chatInput = document.getElementById('chatInput');
+    
+    if (sendChatBtn) {
+        sendChatBtn.addEventListener('click', sendChatMessage);
+    }
+    
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+    }
     
     // 채팅 탭 전환
     document.querySelectorAll('.chat-tab').forEach(tab => {
@@ -1108,7 +1157,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // 에러 알림 닫기
-    document.getElementById('closeError').addEventListener('click', () => {
-        document.getElementById('errorNotification').classList.add('hidden');
-    });
+    const closeErrorBtn = document.getElementById('closeError');
+    if (closeErrorBtn) {
+        closeErrorBtn.addEventListener('click', () => {
+            document.getElementById('errorNotification').classList.add('hidden');
+        });
+    }
+    
+    console.log('All event listeners initialized');
 });
