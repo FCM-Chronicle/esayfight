@@ -54,28 +54,71 @@ const gameState = new GameState();
 
 // Socket.IO 연결 설정
 function initializeSocket() {
-    socket = io();
+    // 연결 시도 전 상태 표시
+    addSystemMessage('서버에 연결 중...');
     
-    socket.on('connect', () => {
-        console.log('서버에 연결됨');
-        isConnected = true;
-        updateConnectionStatus(true);
-        document.getElementById('chatInput').disabled = false;
-        document.getElementById('sendChat').disabled = false;
-        
-        // 연결 성공 메시지
-        addSystemMessage('서버에 연결되었습니다.');
-    });
+    // Socket.IO가 로드되었는지 확인
+    if (typeof io === 'undefined') {
+        addSystemMessage('Socket.IO 라이브러리 로드 실패!');
+        showError('네트워크 연결을 확인해주세요.');
+        return;
+    }
     
-    socket.on('disconnect', () => {
-        console.log('서버 연결 끊김');
-        isConnected = false;
-        updateConnectionStatus(false);
-        document.getElementById('chatInput').disabled = true;
-        document.getElementById('sendChat').disabled = true;
+    try {
+        socket = io({
+            timeout: 15000,
+            forceNew: true,
+            transports: ['websocket', 'polling'],
+            upgrade: true,
+            rememberUpgrade: false
+        });
         
-        addSystemMessage('서버 연결이 끊어졌습니다.');
-    });
+        socket.on('connect', () => {
+            console.log('서버에 연결됨:', socket.id);
+            isConnected = true;
+            updateConnectionStatus(true);
+            document.getElementById('chatInput').disabled = false;
+            document.getElementById('sendChat').disabled = false;
+            
+            // 연결 성공 메시지
+            addSystemMessage('서버에 성공적으로 연결되었습니다!');
+        });
+        
+        socket.on('connect_error', (error) => {
+            console.error('연결 오류:', error);
+            addSystemMessage('서버 연결 오류: ' + error.message);
+            showError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
+            
+            // 서버가 아직 시작 중일 수 있으므로 재시도
+            setTimeout(() => {
+                addSystemMessage('연결을 다시 시도합니다...');
+                socket.connect();
+            }, 5000);
+        });
+        
+        socket.on('disconnect', (reason) => {
+            console.log('서버 연결 끊김:', reason);
+            isConnected = false;
+            updateConnectionStatus(false);
+            document.getElementById('chatInput').disabled = true;
+            document.getElementById('sendChat').disabled = true;
+            
+            addSystemMessage('서버 연결이 끊어졌습니다: ' + reason);
+            
+            // 자동 재연결 시도
+            if (reason !== 'io client disconnect') {
+                addSystemMessage('5초 후 재연결을 시도합니다...');
+                setTimeout(() => {
+                    socket.connect();
+                }, 5000);
+            }
+        });
+        
+    } catch (error) {
+        console.error('Socket 초기화 오류:', error);
+        addSystemMessage('Socket 초기화 실패: ' + error.message);
+        showError('게임 초기화에 실패했습니다.');
+    }
     
     // 닉네임 설정 응답
     socket.on('nicknameSet', (data) => {
