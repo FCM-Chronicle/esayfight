@@ -98,10 +98,13 @@ let onlineUsers = 0;
 
 io.on('connection', (socket) => {
     onlineUsers++;
-    console.log('플레이어 연결:', socket.id, '(총', onlineUsers, '명)');
+    console.log(`[${new Date().toISOString()}] 플레이어 연결:`, socket.id, '(총', onlineUsers, '명)');
     
     // 온라인 유저 수 브로드캐스트
     io.emit('onlineCount', onlineUsers);
+    
+    // 연결 확인 메시지
+    socket.emit('systemMessage', '서버에 성공적으로 연결되었습니다!');
     
     let currentPlayer = {
         id: socket.id,
@@ -613,8 +616,30 @@ function checkGameEnd(room) {
     }
 }
 
+// 에러 핸들링 추가
+server.on('error', (error) => {
+    console.error('서버 오류:', error);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('처리되지 않은 예외:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('처리되지 않은 Promise 거부:', reason);
+});
+
 // 서버 시작
-server.listen(PORT, () => {
-    console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
-    console.log(`http://localhost:${PORT} 에서 게임을 플레이할 수 있습니다.`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`=================================`);
+    console.log(`애새이 대난투 서버 시작!`);
+    console.log(`포트: ${PORT}`);
+    console.log(`시간: ${new Date().toISOString()}`);
+    console.log(`URL: http://localhost:${PORT}`);
+    console.log(`Render URL: https://esayfight.onrender.com`);
+    console.log(`Socket.IO 경로: /socket.io/`);
+    console.log(`=================================`);
+    
+    // Socket.IO 테스트
+    console.log('Socket.IO 서버 준비 완료');
 });
