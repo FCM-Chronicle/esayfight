@@ -107,6 +107,25 @@ function initializeSocket() {
     // 특수 공격 알림
     socket.on('specialAttack', (data) => {
         showGameStatus(`${data.player} 특수공격! (${data.damage} 데미지)`);
+        
+        // 특수 공격 텍스트 이펙트 표시
+        if (game) {
+            game.specialAttackText = {
+                duration: 2000 // 2초간 표시
+            };
+        }
+    });
+    
+    // 공격 히트 이펙트
+    socket.on('attackHit', (data) => {
+        if (game) {
+            game.attackEffects.push({
+                type: 'impact',
+                x: data.x,
+                y: data.y,
+                duration: 800 // 0.8초
+            });
+        }
     });
     
     // 재장전 완료
@@ -222,6 +241,8 @@ class Game {
         this.gameData = null;
         this.myPlayerKey = null;
         this.lastActionTime = 0;
+        this.attackEffects = []; // 공격 이펙트 배열
+        this.specialAttackText = null; // 특수 공격 텍스트
         this.setupEventListeners();
     }
     
@@ -322,10 +343,42 @@ class Game {
         const distance = Math.sqrt(dx * dx + dy * dy);
         
         if (distance > 0) {
+            const normalizedDx = dx / distance;
+            const normalizedDy = dy / distance;
+            
+            // 공격 이펙트 추가
+            if (player.char === 1) {
+                // 애새이 1호 - 원거리 공격 이펙트
+                this.attackEffects.push({
+                    type: 'bullet',
+                    startX: player.x,
+                    startY: player.y,
+                    endX: this.mouse.x,
+                    endY: this.mouse.y,
+                    color: '#4b96ff',
+                    duration: 500 // 0.5초
+                });
+            } else {
+                // 애새이 2호 - 돌진 공격 이펙트
+                const dashDistance = 30; // 6배 증가 (5 -> 30)
+                const endX = Math.max(25, Math.min(775, player.x + normalizedDx * dashDistance));
+                const endY = Math.max(25, Math.min(575, player.y + normalizedDy * dashDistance));
+                
+                this.attackEffects.push({
+                    type: 'dash',
+                    startX: player.x,
+                    startY: player.y,
+                    endX: endX,
+                    endY: endY,
+                    color: '#ff4b4b',
+                    duration: 300 // 0.3초
+                });
+            }
+            
             socket.emit('gameAction', {
                 type: 'attack',
-                dx: dx / distance,
-                dy: dy / distance,
+                dx: normalizedDx,
+                dy: normalizedDy,
                 mouseX: this.mouse.x,
                 mouseY: this.mouse.y
             });
@@ -504,7 +557,105 @@ class Game {
     }
     
     renderEffects() {
-        // 여기에 특수 효과들 (총알 궤적, 폭발 등) 렌더링
+        // 공격 이펙트 렌더링
+        if (this.attackEffects && this.attackEffects.length > 0) {
+            this.attackEffects.forEach((effect, index) => {
+                this.ctx.save();
+                
+                if (effect.type === 'bullet') {
+                    // 총알 궤적 이펙트
+                    this.ctx.strokeStyle = effect.color;
+                    this.ctx.lineWidth = 3;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(effect.startX, effect.startY);
+                    this.ctx.lineTo(effect.endX, effect.endY);
+                    this.ctx.stroke();
+                    
+                    // 총알 끝점에 작은 폭발
+                    this.ctx.fillStyle = effect.color;
+                    this.ctx.beginPath();
+                    this.ctx.arc(effect.endX, effect.endY, 5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                } else if (effect.type === 'dash') {
+                    // 돌진 궤적 이펙트
+                    this.ctx.strokeStyle = effect.color;
+                    this.ctx.lineWidth = 8;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(effect.startX, effect.startY);
+                    this.ctx.lineTo(effect.endX, effect.endY);
+                    this.ctx.stroke();
+                    
+                    // 돌진 잔상 효과
+                    for (let i = 0; i < 5; i++) {
+                        const progress = i / 5;
+                        const x = effect.startX + (effect.endX - effect.startX) * progress;
+                        const y = effect.startY + (effect.endY - effect.startY) * progress;
+                        this.ctx.fillStyle = `rgba(${effect.color === '#ff6b6b' ? '255, 107, 107' : '75, 150, 255'}, ${0.3 - progress * 0.3})`;
+                        this.ctx.beginPath();
+                        this.ctx.arc(x, y, 15 - i * 2, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                } else if (effect.type === 'impact') {
+                    // 충돌 이펙트
+                    const radius = 20 + Math.sin(Date.now() * 0.02) * 5;
+                    this.ctx.strokeStyle = '#ff0000';
+                    this.ctx.lineWidth = 4;
+                    this.ctx.beginPath();
+                    this.ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+                    this.ctx.stroke();
+                    
+                    // 별 모양 충격파
+                    this.ctx.fillStyle = '#ffff00';
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (i * Math.PI * 2) / 8;
+                        const x = effect.x + Math.cos(angle) * radius;
+                        const y = effect.y + Math.sin(angle) * radius;
+                        this.ctx.beginPath();
+                        this.ctx.arc(x, y, 3, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                }
+                
+                this.ctx.restore();
+                
+                // 이펙트 지속시간 감소
+                effect.duration -= 16; // 60fps 기준
+                if (effect.duration <= 0) {
+                    this.attackEffects.splice(index, 1);
+                }
+            });
+        }
+        
+        // 특수 공격 텍스트 이펙트
+        if (this.specialAttackText && this.specialAttackText.duration > 0) {
+            this.ctx.save();
+            
+            const progress = 1 - (this.specialAttackText.duration / 2000); // 2초 동안
+            const scale = 1 + Math.sin(progress * Math.PI * 4) * 0.2; // 펄스 효과
+            const alpha = progress < 0.8 ? 1 : (1 - progress) * 5; // 페이드 아웃
+            
+            this.ctx.textAlign = 'center';
+            this.ctx.font = `bold ${40 * scale}px Arial`;
+            this.ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+            this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+            this.ctx.lineWidth = 2;
+            
+            // 그림자 효과
+            this.ctx.shadowColor = 'black';
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowOffsetX = 2;
+            this.ctx.shadowOffsetY = 2;
+            
+            this.ctx.strokeText('궁극기!', this.canvas.width / 2, this.canvas.height / 2);
+            this.ctx.fillText('궁극기!', this.canvas.width / 2, this.canvas.height / 2);
+            
+            this.ctx.restore();
+            
+            this.specialAttackText.duration -= 16;
+            if (this.specialAttackText.duration <= 0) {
+                this.specialAttackText = null;
+            }
+        }
     }
 }
 
