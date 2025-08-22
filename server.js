@@ -232,9 +232,19 @@ io.on('connection', (socket) => {
         }
         currentPlayer.character = character;
     });
+
+    // 게임 시작
+    socket.on('startGame', () => {
         if (currentPlayer.room) {
             const room = gameRooms.get(currentPlayer.room);
             if (room && room.host === socket.id && room.players.length === 2) {
+                // 모든 플레이어가 준비되었는지 확인
+                const allReady = room.players.every(p => p.ready);
+                if (!allReady) {
+                    socket.emit('error', '모든 플레이어가 준비되지 않았습니다.');
+                    return;
+                }
+                
                 room.gameState = 'playing';
                 room.startTime = Date.now();
                 
@@ -245,6 +255,16 @@ io.on('connection', (socket) => {
                 // 체력 설정
                 room.gameData.player1.health = room.players[0].character === 1 ? 100 : 70;
                 room.gameData.player2.health = room.players[1].character === 1 ? 100 : 70;
+                
+                // 위치 초기화
+                room.gameData.player1.x = 100;
+                room.gameData.player1.y = 300;
+                room.gameData.player2.x = 700;
+                room.gameData.player2.y = 300;
+                
+                // 총알 초기화
+                room.gameData.player1.bullets = 3;
+                room.gameData.player2.bullets = 3;
                 
                 io.to(currentPlayer.room).emit('gameStart', room.gameData);
             }
