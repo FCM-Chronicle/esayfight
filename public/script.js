@@ -1,4 +1,35 @@
-// Socket.IO 연결
+// 공격 히트 이펙트
+    socket.on('attackHit', (data) => {
+        if (game) {
+            game.attackEffects.push({
+                type: 'impact',
+                x: data.x,
+                y: data.y,
+                duration: 800 // 0.8초
+            });
+        }
+    });
+    
+    // 플레이어 피격 효과
+    socket.on('playerHit', (data) => {
+        if (game) {
+            // 피격된 플레이어를 빨간색으로 변경 (0.3초간)
+            game.playerHitEffects[data.target] = 300; // 300ms
+            
+            // 데미지 텍스트 표시
+            const targetPlayer = gameState.gameData[data.target];
+            if (targetPlayer) {
+                game.attackEffects.push({
+                    type: 'damage',
+                    x: targetPlayer.x,
+                    y: targetPlayer.y - 40,
+                    damage: data.damage,
+                    special: data.special || false,
+                    duration: 1000 // 1초
+                });
+            }
+        }
+    });// Socket.IO 연결
 let socket = null;
 let isConnected = false;
 
@@ -243,6 +274,7 @@ class Game {
         this.lastActionTime = 0;
         this.attackEffects = []; // 공격 이펙트 배열
         this.specialAttackText = null; // 특수 공격 텍스트
+        this.playerHitEffects = {}; // 플레이어 피격 효과
         this.setupEventListeners();
     }
     
@@ -493,6 +525,11 @@ class Game {
     }
     
     renderPlayer(player, color, number) {
+        // 피격 효과 확인
+        const playerKey = `player${number}`;
+        const isHit = this.playerHitEffects[playerKey] && this.playerHitEffects[playerKey] > 0;
+        const currentColor = isHit ? '#ff0000' : color; // 피격시 빨간색
+        
         // 플레이어 그림자
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         this.ctx.beginPath();
@@ -500,7 +537,7 @@ class Game {
         this.ctx.fill();
         
         // 플레이어 몸체
-        this.ctx.fillStyle = color;
+        this.ctx.fillStyle = currentColor;
         this.ctx.beginPath();
         this.ctx.arc(player.x, player.y, 25, 0, Math.PI * 2);
         this.ctx.fill();
@@ -553,6 +590,14 @@ class Game {
             this.ctx.beginPath();
             this.ctx.arc(player.x - 15 + i * 15, player.y - 55, 3, 0, Math.PI * 2);
             this.ctx.fill();
+        }
+        
+        // 피격 효과 시간 감소
+        if (isHit) {
+            this.playerHitEffects[playerKey] -= 16; // 60fps 기준
+            if (this.playerHitEffects[playerKey] <= 0) {
+                delete this.playerHitEffects[playerKey];
+            }
         }
     }
     
@@ -614,6 +659,21 @@ class Game {
                         this.ctx.arc(x, y, 3, 0, Math.PI * 2);
                         this.ctx.fill();
                     }
+                } else if (effect.type === 'damage') {
+                    // 데미지 텍스트 이펙트
+                    const progress = 1 - (effect.duration / 1000);
+                    const yOffset = progress * 30; // 위로 올라감
+                    const alpha = 1 - progress; // 페이드 아웃
+                    
+                    this.ctx.textAlign = 'center';
+                    this.ctx.font = effect.special ? 'bold 24px Arial' : 'bold 18px Arial';
+                    this.ctx.fillStyle = effect.special ? 
+                        `rgba(255, 0, 255, ${alpha})` : `rgba(255, 100, 100, ${alpha})`;
+                    this.ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                    this.ctx.lineWidth = 1;
+                    
+                    this.ctx.strokeText(`-${effect.damage}`, effect.x, effect.y - yOffset);
+                    this.ctx.fillText(`-${effect.damage}`, effect.x, effect.y - yOffset);
                 }
                 
                 this.ctx.restore();
